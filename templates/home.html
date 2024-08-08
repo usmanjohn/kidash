@@ -1,0 +1,162 @@
+{% extends "base.html" %} {% block content %}
+<div class="container mt-5">
+  <div class="row">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">건별데이터</div>
+        <div class="card-body">
+          {% if current_user.is_authenticated %}
+            <p>Instructions for File 1...</p>
+        
+            <div class="d-flex justify-content-between align-items-center">
+              <!-- Form for file upload on the left -->
+              <form
+                action="{{ url_for('uploads.upload_file', file_type='support') }}"
+                method="post"
+                enctype="multipart/form-data"
+                class="mb-0"  
+              >
+                {{ form1.csrf_token }} {{ form1.file(class="form-control", style="width: auto; display: inline-block;") }}
+                <button type="submit" class="btn btn-primary btn-sm">
+                  건별데이터 업로드 <i class="bi bi-cloud-plus"></i>
+                </button>
+              </form>
+        
+              <!-- Link button for collapse on the right -->
+              <button class="btn btn-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#collapseExample1" aria-expanded="false" aria-controls="collapseExample1">
+                이전 파일 <i class="bi bi-chevron-expand"></i>
+              </button>
+            </div>
+        
+            <div class="collapse mt-2" id="collapseExample1">
+              <div class="card card-body">
+                {% if support_files %}
+                <ul class="scrollable-list">
+                  {% for file in support_files %}
+                  <li><a href="{{ url_for('uploads.select_file', file_type='support', file_id=file.id) }}">{{ file.filename }}</a></li>
+                  {% endfor %}
+                </ul>
+                {% else %}
+                <p>No files uploaded.</p>
+                {% endif %}
+              </div>
+            </div>
+            {% if support_html %}
+        <div class="card mt-2">
+            <div class="card-header">건별데이터 보기</div>
+            <div class="card-body scrollable-content">
+                {{ support_html|safe }}
+            </div>
+        </div>
+        {% endif %}
+        
+          {% else %}
+            <p>You are required to login to upload a file</p>
+            <a class="btn btn-primary"  href="{{ url_for('users.login') }}">
+              Login
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">당월데이터</div>
+        <div class="card-body">
+          {% if current_user.is_authenticated %}
+            <p>Instructions for File 2...</p>
+        
+            <div class="d-flex justify-content-between align-items-center">
+              <!-- Form for file upload on the left -->
+              <form
+                action="{{ url_for('uploads.upload_file', file_type='main') }}"
+                method="post"
+                enctype="multipart/form-data"
+                class="mb-0" 
+              >
+                {{ form2.csrf_token }} {{ form2.file(class="form-control", style="width: auto; display: inline-block;") }}
+                <button type="submit" class="btn btn-primary btn-sm">
+                  당월데이터 업로드 <i class="bi bi-cloud-plus"></i>
+                </button>
+              </form>
+        
+              <!-- Link button for collapse on the right -->
+              <button class="btn btn-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#collapseExample2" aria-expanded="false" aria-controls="collapseExample2">
+                이전 파일 <i class="bi bi-chevron-expand"></i>
+            </button>
+            
+            </div>
+        
+            <div class="collapse mt-2" id="collapseExample2">
+              <div class="card card-body">
+                {% if main_files %}
+                <ul class="scrollable-list">
+                  {% for file in main_files %}
+                  <li><a href="{{ url_for('uploads.select_file', file_type='main', file_id=file.id) }}">{{ file.filename }}</a></li>
+                  {% endfor %}
+                </ul>
+                {% else %}
+                <p>No files uploaded.</p>
+                {% endif %}
+              </div>
+            </div>
+            {% if main_html %}
+          <div>
+            <h4>당월데이터 보기</h4>
+            {{ main_html|safe }}
+          </div>
+          {% endif %}
+        
+          {% else %}
+          <p>You are required to login to upload a file</p>
+          <a class="btn btn-primary"  href="{{ url_for('users.login') }}">
+            Login
+          </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+  function getCsrfToken() {
+    return $('meta[name=csrf-token]').attr('content');
+  }
+
+  function selectFile(fileId, fileType) {
+    $.ajax({
+      url: '/select_file',
+      method: 'POST',
+      data: {file_id: fileId, file_type: fileType},
+      headers: {
+        'X-CSRFToken': getCsrfToken()
+      },
+      success: function(response) {
+        console.log('File selected successfully');
+        location.reload();
+      },
+      error: function(jqXHR, textStatus, errorThrown) {
+        console.error('Error selecting file:', textStatus, errorThrown);
+        alert('Error selecting file. Please try again.');
+      }
+    });
+  }
+
+  $('.support-file-link').click(function(e) {
+    e.preventDefault();
+    var fileId = $(this).data('file-id');
+    selectFile(fileId, 'support');
+  });
+
+  $('.main-file-link').click(function(e) {
+    e.preventDefault();
+    var fileId = $(this).data('file-id');
+    selectFile(fileId, 'main');
+  });
+});
+</script>
+{% endblock %}

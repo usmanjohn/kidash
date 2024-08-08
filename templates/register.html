@@ -1,63 +1,63 @@
-{% extends "base.html" %}
-
-{% block content %}
+{% extends "base.html" %} {% block content %}
 <div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-6">
-            <h1 class="mb-4">Register</h1>
-            <form class="form-horizontal" action="{{ url_for('web.register') }}" method="POST">
-                {{ form.hidden_tag() }}
-                
-                <div class="mb-3">
-                    {{ form.username.label(class="form-label") }}
-                    {{ form.username(class="form-control") }}
-                    {% if form.username.errors %}
-                        <div class="alert alert-danger" role="alert">
-                            {{ form.username.errors[0] }}
-                        </div>
-                    {% endif %}
-                </div>
-                
-                <div class="mb-3">
-                    {{ form.email.label(class="form-label") }}
-                    {{ form.email(class="form-control") }}
-                    {% if form.email.errors %}
-                        <div class="alert alert-danger" role="alert">
-                            {{ form.email.errors[0] }}
-                        </div>
-                    {% endif %}
-                </div>
-                
-                <div class="mb-3">
-                    {{ form.password.label(class="form-label") }}
-                    {{ form.password(class="form-control") }}
-                    {% if form.password.errors %}
-                        <div class="alert alert-danger" role="alert">
-                            {{ form.password.errors[0] }}
-                        </div>
-                    {% endif %}
-                </div>
-                
-                <div class="mb-3">
-                    {{ form.confirm_password.label(class="form-label") }}
-                    {{ form.confirm_password(class="form-control") }}
-                    {% if form.confirm_password.errors %}
-                        <div class="alert alert-danger" role="alert">
-                            {{ form.confirm_password.errors[0] }}
-                        </div>
-                    {% endif %}
-                </div>
-                
-                <div class="d-grid">
-                    <button type="submit" class="btn btn-primary">Register</button>
-                </div>
-            </form>
-            <div class="border-top pt-3">
-                <small class="text-muted">
-                    Already have an Account? <a href="{{ url_for('web.login') }}" class="ml-2">Login</a>
-                </small>
-            </div>
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <h1 class="mb-4">Register</h1>
+      <form
+        class="form-horizontal"
+        action="{{ url_for('users.register') }}"
+        method="POST"
+      >
+        {{ form.hidden_tag() }}
+
+        <div class="mb-3">
+          {{ form.username.label(class="form-label") }} {{
+          form.username(class="form-control") }} {% if form.username.errors %}
+          <div class="alert alert-danger" role="alert">
+            {{ form.username.errors[0] }}
+          </div>
+          {% endif %}
         </div>
+
+        <div class="mb-3">
+          {{ form.email.label(class="form-label") }} {{
+          form.email(class="form-control") }} {% if form.email.errors %}
+          <div class="alert alert-danger" role="alert">
+            {{ form.email.errors[0] }}
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="mb-3">
+          {{ form.password.label(class="form-label") }} {{
+          form.password(class="form-control") }} {% if form.password.errors %}
+          <div class="alert alert-danger" role="alert">
+            {{ form.password.errors[0] }}
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="mb-3">
+          {{ form.confirm_password.label(class="form-label") }} {{
+          form.confirm_password(class="form-control") }} {% if
+          form.confirm_password.errors %}
+          <div class="alert alert-danger" role="alert">
+            {{ form.confirm_password.errors[0] }}
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="d-grid">
+          <button type="submit" class="btn btn-primary">Register</button>
+        </div>
+      </form>
+      <div class="border-top pt-3">
+        <small class="text-muted">
+          Already have an Account?
+          <a href="{{ url_for('users.login') }}" class="ml-2">Login</a>
+        </small>
+      </div>
     </div>
+  </div>
 </div>
 {% endblock %}

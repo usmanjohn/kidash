@@ -7,7 +7,7 @@ from models import User, UploadSupport, UploadMain
 from extensions import db, bcrypt
 from flask_login import login_user, current_user, logout_user, login_required
 from application import create_app
-from aws_client import upload_file_to_s3
+from services.aws_client import upload_file_to_s3
 
     # Now you can safely use s3_client
 
@@ -17,14 +17,15 @@ from aws_client import upload_file_to_s3
 web = Blueprint('web', __name__)  # Creating a blueprint named 'web'
 
 
-@web.context_processor
-def inject_upload_form():
-    return dict(form=UploadForm())
+#@web.context_processor
+#def inject_upload_form():
+#    return dict(form=UploadForm())
 
 @web.route('/')
 def home():
-    form = UploadForm()
-    return render_template('base.html', form = form)
+    form1 = UploadForm()
+    form2 = UploadForm()
+    return render_template('home.html', form1 = form1, form2 = form2)
 
 @web.route('/register', methods=['POST', 'GET'])
 def register():
@@ -112,13 +113,14 @@ def upload_file_2():
 @web.route('/userdata')
 def userdata():
     if current_user.is_authenticated:
-        uploads = current_user.uploadmain
+        uploads = current_user.uploadsupport
         return render_template('userdata.html', uploads = uploads)
+    else: return render_template('userdata.html')
 
 @web.route('/check-uploads')
 def check_uploads():
     try:
-        uploads = UploadSupport.query.all()
+        uploads = UploadMain.query.all()
         print(f"Number of uploads fetched: {len(uploads)}")  # Debug print
         for upload in uploads:
             print(f"Upload: {upload}")  # Debug print
@@ -126,3 +128,84 @@ def check_uploads():
     except Exception as e:
         print(f"Error in check-uploads: {str(e)}")  # Debug print
         return jsonify({'error': str(e)}), 500
+    
+from services.aws_client import delete_file_from_s3
+
+def delete_main_upload(upload_id):
+    try:
+        with db.session.begin_nested():  # Start a savepoint
+            upload = UploadMain.query.get(upload_id)
+            if not upload:
+                return False, "Upload not found"
+
+            # Delete from S3 first
+            if not delete_file_from_s3(upload.s3_key):
+                raise Exception("Failed to delete file from S3")
+
+            # If S3 deletion was successful, delete from database
+            db.session.delete(upload)
+        
+        # If we get here, both S3 and database deletions were successful
+        db.session.commit()
+        return True, "Upload deleted successfully"
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error deleting upload: {str(e)}")
+        return False, str(e)
+    
+@web.route('/delete-main-upload/<int:upload_id>', methods=['POST', 'GET'])
+@login_required
+def delete_m_upload(upload_id):
+    upload = UploadMain.query.get(upload_id)
+    if not upload or upload.user_id != current_user.id:
+        flash('Upload not found or you do not have permission to delete it.', 'error')
+        return redirect(url_for('web.userdata'))
+
+    success, message = delete_main_upload(upload_id)
+    if success:
+        flash('Upload deleted successfully.', 'success')
+    else:
+        flash(f'Error deleting upload: {message}', 'error')
+
+    return redirect(url_for('web.userdata'))
+
+
+def delete_support_upload(upload_id):
+    try:
+        with db.session.begin_nested():  # Start a savepoint
+            upload = UploadSupport.query.get(upload_id)
+            if not upload:
+                return False, "Upload not found"
+
+            # Delete from S3 first
+            if not delete_file_from_s3(upload.s3_key):
+                raise Exception("Failed to delete file from S3")
+
+            # If S3 deletion was successful, delete from database
+            db.session.delete(upload)
+        
+        # If we get here, both S3 and database deletions were successful
+        db.session.commit()
+        return True, "Upload deleted successfully"
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error deleting upload: {str(e)}")
+        return False, str(e)
+    
+@web.route('/delete-support-upload/<int:upload_id>', methods=['POST', 'GET'])
+@login_required
+def delete_s_upload(upload_id):
+    upload = UploadSupport.query.get(upload_id)
+    if not upload or upload.user_id != current_user.id:
+        flash('Upload not found or you do not have permission to delete it.', 'error')
+        return redirect(url_for('web.userdata'))
+
+    success, message = delete_support_upload(upload_id)
+    if success:
+        flash('Upload deleted successfully.', 'success')
+    else:
+        flash(f'Error deleting upload: {message}', 'error')
+
+    return redirect(url_for('web.userdata'))

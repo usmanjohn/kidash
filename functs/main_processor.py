@@ -6,11 +6,12 @@ class DataProcessor:
     def __init__(self, static_data):
         self.process_data = None
         
+        
         for key, value in static_data.items():
             setattr(self, key, value)
 
-    def load_data(self,  main_data):
-        
+    def load_data(self,  main_data, support_data):
+        self.data_case = support_data
         self.process_data = main_data
         print("Loaded this month data")
     

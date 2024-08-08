@@ -2,7 +2,7 @@ from dash import Dash, dcc, html, dash_table, Input, Output, callback, State
 import dash_bootstrap_components as dbc
 import pandas as pd
 import numpy as np
-from style import data_table_styles
+
 
 import math
 import plotly.express as px
@@ -39,6 +39,6 @@ def create_data_table(data):
         data=data.to_dict('records'),
         columns=[{"name": i, "id": i} for i in data.columns],
         
-        **data_table_styles,
+        #**data_table_styles,
         
     )
