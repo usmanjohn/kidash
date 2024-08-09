@@ -18,6 +18,8 @@ class User(db.Model, UserMixin):
 
     uploadsupport = db.relationship('UploadSupport', backref='user', lazy=True)
     uploadmain = db.relationship('UploadMain', backref='user', lazy=True)
+    processedsupport = db.relationship('ProcessedSupport', backref='user', lazy=True)
+    processedmain = db.relationship('ProcessedMain', backref='user', lazy=True)
 
     def __repr__(self) -> str:
         return f'<User {self.username}>'
@@ -34,6 +36,26 @@ class UploadSupport(db.Model):
         return f'<Upload {self.filename}>'
 
 class UploadMain(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(256), nullable=False)
+    s3_key = db.Column(db.String(256), nullable=False)
+    upload_date = db.Column(db.DateTime, default=datetime.now())
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))  # Assuming you have a User model
+
+    def __repr__(self):
+        return f'<Upload {self.filename}>'
+
+class ProcessedSupport(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(256), nullable=False)
+    s3_key = db.Column(db.String(256), nullable=False)
+    upload_date = db.Column(db.DateTime, default=datetime.now())
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))  # Assuming you have a User model
+
+    def __repr__(self):
+        return f'<Upload {self.filename}>'
+
+class ProcessedMain(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(256), nullable=False)
     s3_key = db.Column(db.String(256), nullable=False)

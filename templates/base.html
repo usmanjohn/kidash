@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="csrf-token" content="{{ csrf_token() }}" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Insurance Analysis Dashboard</title>
     <!-- Bootstrap CSS -->
@@ -34,7 +35,7 @@
       .scrollable-content {
         overflow-x: auto; /* Enables horizontal scrolling */
         overflow-y: auto; /* Enables vertical scrolling */
-        max-height: 300px; /* or whatever height suits your design */
+        max-height: 200px; /* or whatever height suits your design */
       }
     </style>
   </head>
@@ -114,6 +115,7 @@
     {% with messages = get_flashed_messages(with_categories = True) %} {% if
     messages %} {% for category, message in messages %}
     <div class="alert alert-{{ category }}">{{ message }}</div>
-    {% endfor %} {% endif %} {% endwith %} {% block content %}{% endblock %}
+    {% endfor %} {% endif %} {% endwith %} {% block content %}{% endblock %} {%
+    block scripts %}{% endblock scripts %}
   </body>
 </html>

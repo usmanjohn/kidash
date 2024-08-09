@@ -1,13 +1,20 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, session
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, session,make_response, send_file
 from werkzeug.utils import secure_filename
 from .forms import UploadForm
-from models.models import UploadSupport, UploadMain, User
+from models.models import UploadSupport, UploadMain, ProcessedMain, ProcessedSupport
 from extensions.extensions import db, cache
 from sqlalchemy import desc
 from flask_login import current_user, login_required
-from services.aws_client import upload_file_to_s3, get_file_from_s3, get_static_data
+from services.aws_client import upload_file_to_s3, get_file_from_s3, get_static_data, get_cached_file_data
 from .functs import delete_upload
 import pandas as pd
+import boto3
+import datetime
+from functs.data_case_modify import data_case_fill
+from functs.main_processor import DataProcessor
+from functs.format_processor import format_processor
+from functs.sample_datas import sample_data
+
 from io import BytesIO
 
 from flask import current_app
@@ -20,22 +27,6 @@ def inject_upload_form():
     return dict(form=UploadForm())
 
 
-@cache.memoize(timeout=3600)
-def get_cached_file_data(file_type, user_id, file_id=None):
-    if file_type == 'main':
-        if file_id:
-            file = UploadMain.query.get(file_id)
-        else:
-            file = UploadMain.query.filter_by(user_id=user_id).order_by(desc(UploadMain.upload_date)).first()
-    else:
-        if file_id:
-            file = UploadSupport.query.get(file_id)
-        else:
-            file = UploadSupport.query.filter_by(user_id=user_id).order_by(desc(UploadSupport.upload_date)).first()
-    
-    if file:
-        return get_file_from_s3(file.s3_key), file.id
-    return pd.DataFrame(), None
 
 
 @uploads.route('/')
@@ -43,65 +34,101 @@ def home():
     support_html = ''
     main_html = ''
     if current_user.is_authenticated:
-        support_files = UploadSupport.query.filter_by(user_id=current_user.id).order_by(desc(UploadSupport.upload_date)).all()
-        main_files = UploadMain.query.filter_by(user_id=current_user.id).order_by(desc(UploadMain.upload_date)).all()
-        
         try:
-            main_data, selected_main_id = get_cached_file_data('main', current_user.id, session.get('selected_main_id'))
-            support_data, selected_support_id = get_cached_file_data('support', current_user.id, session.get('selected_support_id'))
+            main_data = get_cached_file_data('main', current_user.id)
+            support_data = get_cached_file_data('support', current_user.id)
             
-            # Update session with the latest file IDs if not already set
-            if not session.get('selected_main_id') and main_files:
-                session['selected_main_id'] = main_files[0].id
-            if not session.get('selected_support_id') and support_files:
-                session['selected_support_id'] = support_files[0].id
-            
+
             support_html = support_data.head().to_html(classes='table table-striped', border=0) if not support_data.empty else ''
             main_html = main_data.head().to_html(classes='table table-striped', border=0) if not main_data.empty else ''
         except Exception as e:
             current_app.logger.error(f"Failed to process data: {str(e)}")
             support_html = ''
             main_html = ''
-    else: 
-        support_files = []
-        main_files = []
-        selected_main_id = None
-        selected_support_id = None
         
     form1 = UploadForm()
     form2 = UploadForm()
+    return render_template('home.html', form1=form1, form2=form2, support_html=support_html, main_html=main_html)
 
+def process_support_data():
+    support_data = get_cached_file_data('support', current_user.id)
+    return data_case_fill(support_data)
+
+def process_main_data():
+    main_data = get_cached_file_data('main', current_user.id)
+    processed_support = get_cached_file_data('processed_support', current_user.id)
     static_data = get_static_data()
+    processor = DataProcessor(static_data)
+    processor.load_data(main_data, processed_support)
+    processor.process()
+    
+    processed_main = processor.get_processed_data()
+    return format_processor(processed_main)
 
-    return render_template('home.html', form1=form1, form2=form2, support_files=support_files,
-                           main_files=main_files, support_html=support_html, main_html=main_html,
-                           static_data=static_data, selected_main_id=selected_main_id,
-                           selected_support_id=selected_support_id)
-
-
-
-@uploads.route('/select_file/<file_type>/<int:file_id>', methods=['GET'])
-@login_required
-def select_file(file_type, file_id):
-    if file_type not in ['main', 'support']:
-        flash('Invalid file type', 'error')
-        return redirect(url_for('uploads.home'))
-
-    # Clear the cache for the selected file type
-    cache.delete_memoized(get_cached_file_data, file_type, current_user.id)
-
-    # Update the session with the selected file ID
-    session[f'selected_{file_type}_id'] = file_id
-
-    # Update the cache with the new file data
+@uploads.route('/process/<file_type>', methods=['POST', "GET"])
+def process_data(file_type):
     try:
-        get_cached_file_data(file_type, current_user.id, file_id)
-        flash(f'Successfully selected {file_type} file', 'success')
-    except Exception as e:
-        current_app.logger.error(f"Error updating cache: {str(e)}")
-        flash('Error selecting file. Please try again.', 'error')
+        if file_type == 'support':
+            processed_data = process_support_data()
+            upload_file_type = 'processed_support'
+        elif file_type == 'main':
+            processed_data = process_main_data()
+            upload_file_type = 'processed_main'
+        else:
+            return jsonify({'error': 'Invalid file type'}), 400
 
-    return redirect(url_for('uploads.home'))
+        upload_processed_data(processed_data, upload_file_type)
+        
+        # Clear the cache for the processed file type
+        cache.delete_memoized(get_cached_file_data, upload_file_type, current_user.id)
+        
+        
+        return jsonify({'success': True, 'message': f'{file_type.capitalize()} data processed successfully'})
+    except Exception as e:
+        current_app.logger.error(f"Error processing {file_type} data: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+def upload_processed_data(data, file_type):
+    filename = f'{"건별" if file_type == "processed_support" else "당월"}데이터.xlsx'
+    folder = file_type
+    
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        data.to_excel(writer, index=False)
+    output.seek(0)
+    
+    s3_key, new_filename = upload_file_to_s3(output, filename, folder=folder)
+    
+    if file_type == 'processed_support':
+        new_upload = ProcessedSupport(filename=new_filename, s3_key=s3_key, user_id=current_user.id)
+    elif file_type == 'processed_main':
+        new_upload = ProcessedMain(filename=new_filename, s3_key=s3_key, user_id=current_user.id)
+    else:
+        raise ValueError(f"Invalid file type: {file_type}")
+    
+    db.session.add(new_upload)
+    db.session.commit()
+
+@uploads.route('/download/<file_type>',methods=['POST', "GET"])
+def download_processed(file_type):
+    if file_type not in ['processed_support', 'processed_main']:
+        return jsonify({'error': 'Invalid file type'}), 400
+    
+    latest_processed = get_cached_file_data(file_type, current_user.id)
+    if latest_processed is None or latest_processed.empty:
+        return jsonify({'error': f'No processed {file_type} data available'}), 404
+    
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        latest_processed.to_excel(writer, index=False)
+    output.seek(0)
+    
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"{file_type.replace('processed_', '')}_data.xlsx",
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
 
 
 @uploads.route('/upload/<file_type>', methods=['POST'])
@@ -111,10 +138,27 @@ def upload_file(file_type):
     if form.validate_on_submit():
         file = form.file.data
         if file:
-            original_filename = secure_filename(file.filename)
             try:
+                # Read the file into a pandas DataFrame
+                df = pd.read_excel(file)
+                if file_type == 'support' and len(df.columns) != 33:
+                    flash(f'건별데이터 파일에는 정확히 33개의 열이 있어야 합니다. 이 파일에는 {len(df.columns)} 개의 열이 있습니다.', 'danger')
+                    return redirect(url_for('uploads.home'))
+                elif file_type == 'main' and len(df.columns) != 3:
+                    flash(f'당월데이터 파일에는 정확히 3개의 열이 있어야 합니다. 이 파일에는 {len(df.columns)} 개의 열이 있습니다.', 'danger')
+                    return redirect(url_for('uploads.home'))
+                
+                # If we've passed the column check, proceed with upload
+                original_filename = secure_filename(file.filename)
                 folder = 'support_data' if file_type == 'support' else 'main_data'
-                s3_key, new_filename = upload_file_to_s3(file, original_filename, folder=folder)
+                
+                # Convert DataFrame back to Excel file
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    df.to_excel(writer, index=False)
+                output.seek(0)
+                
+                s3_key, new_filename = upload_file_to_s3(output, original_filename, folder=folder)
                 
                 if file_type == 'support':
                     new_upload = UploadSupport(filename=new_filename, s3_key=s3_key, user_id=current_user.id)
@@ -132,9 +176,9 @@ def upload_file(file_type):
                 
                 flash(f'File uploaded successfully as {new_filename}.', 'success')
             except Exception as e:
-                flash(f'Error uploading file: {str(e)}', 'error')
+                flash(f'Error processing or uploading file: {str(e)}', 'danger')
     else:
-        flash('Error in form submission.', 'error')
+        flash('Error in form submission.', 'danger')
     return redirect(url_for('uploads.home'))
 
 @uploads.route('/delete-upload/<upload_type>/<int:upload_id>', methods=['POST'])
@@ -144,5 +188,17 @@ def delete_upload_route(upload_type, upload_id):
     if success:
         flash('Upload deleted successfully.', 'success')
     else:
-        flash(f'Error deleting upload: {message}', 'error')
+        flash(f'Error deleting upload: {message}', 'danger')
     return redirect(url_for('uploads.home'))
+
+@uploads.route('/download-sample/<sample_name>')
+def download_sample(sample_name):
+    df = sample_data(sample_name)
+    excel_file = BytesIO()
+    with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False)
+    excel_file.seek(0)
+    response = make_response(excel_file.read())
+    response.headers.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response.headers.set('Content-Disposition', 'attachment', filename=f"{sample_name}.xlsx")
+    return response

@@ -1,11 +1,13 @@
 from io import BytesIO
 import boto3
 from flask import current_app
-from datetime import datetime
+import datetime
 import os
 import io
 import pandas as pd
 from extensions.extensions import cache
+from models.models import UploadMain, UploadSupport, ProcessedMain, ProcessedSupport
+from sqlalchemy import desc
 
 
 def upload_file_to_s3(file, filename, folder=''):
@@ -14,7 +16,7 @@ def upload_file_to_s3(file, filename, folder=''):
         aws_access_key_id=current_app.config['AWS_ACCESS_KEY_ID'],
         aws_secret_access_key=current_app.config['AWS_SECRET_ACCESS_KEY']
     )
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
     name, ext = os.path.splitext(filename)
     new_filename = f"{name}_{timestamp}{ext}"
     if folder:
@@ -63,11 +65,30 @@ def get_file_from_s3(s3_key):
         return None 
     
 
+@cache.memoize(timeout=3600)
+def get_cached_file_data(file_type, user_id):
+    if file_type == 'main':    
+        file = UploadMain.query.filter_by(user_id=user_id).order_by(desc(UploadMain.upload_date)).first()
+    elif file_type == 'processed_main':    
+        file = ProcessedMain.query.filter_by(user_id=user_id).order_by(desc(ProcessedMain.upload_date)).first()
+    elif file_type == 'processed_support':    
+        file = ProcessedSupport.query.filter_by(user_id=user_id).order_by(desc(ProcessedSupport.upload_date)).first()
+    elif file_type == 'support':
+        file = UploadSupport.query.filter_by(user_id=user_id).order_by(desc(UploadSupport.upload_date)).first()
+    else:
+        pass
+    if file:
+        return get_file_from_s3(file.s3_key)
+    return pd.DataFrame()
+
 file_paths = {
     'commission_rate': 'prep/commission_rate.xlsx',
     'retention_rate': 'prep/retention_rate.xlsx',
     'ins_retention_rate': 'prep/ins_retention_rate.xlsx',
-    'working_data': 'prep/m5_working_data.xlsx'
+    'working_data': 'prep/m5_working_data.xlsx',
+    'data_case_sample': 'prep/sample_data_case.xlsx',
+    'main_data_sample': 'prep/sample_main_data.xlsx',
+    
 }
 @cache.cached(timeout=3600, key_prefix='static_data')
 def load_static_data():
@@ -88,17 +109,13 @@ def get_static_data():
     return load_static_data()
 
 
+def create_excel_file(df, filename):
+    """Helper function to create an Excel file from a DataFrame"""
+    from io import BytesIO
+    import openpyxl
 
+    output = BytesIO()
+    df.to_excel(output, index=False, engine='openpyxl')
+    output.seek(0)
 
-from flask import session
-from models.models import User
-from extensions.extensions import db
-
-def update_user_file_selection(user_id, file_s3_key, file_type):
-    user = User.query.get(user_id)
-    if user:
-        if file_type == 'main':
-            user.current_main_file_s3_key = file_s3_key
-        elif file_type == 'support':
-            user.current_support_file_s3_key = file_s3_key
-        db.session.commit()
+    return output, filename

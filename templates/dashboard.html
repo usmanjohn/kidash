@@ -1,1 +1,3 @@
-{% extends "base.html" %} {% block content %} {{ table }} {% endblock %}
+{% extends "base.html" %} {% block content %}
+<div class="card">{{ main_html|safe }}</div>
+{% endblock %}
